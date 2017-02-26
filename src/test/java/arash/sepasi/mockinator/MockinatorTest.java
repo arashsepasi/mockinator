@@ -33,6 +33,15 @@ public class MockinatorTest {
     }
 
     @Test
+    public void askForMultipleMocksOfSameClass_ExpectUniqueMocksReturned() {
+        SampleInterface s2 = Mockinator.mockOf(SampleInterface.class);
+        SampleInterface s3 = Mockinator.mockOf(SampleInterface.class);
+        Assert.assertNotEquals(s, s2);
+        Assert.assertNotEquals(s, s3);
+        Assert.assertNotEquals(s2, s3);
+    }
+
+    @Test
     public void mockMockinatorMock_WithNewValue_ExpectMockedValue() {
         final String funcReturn = "Mocked Value!";
         Mockito.when(s.sampleFunction()).thenReturn(funcReturn);

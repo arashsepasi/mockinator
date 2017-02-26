@@ -20,7 +20,7 @@ import java.util.stream.Stream;
 
 /**
  * This class provides mock implementation of classes for use in unit testing. <br>
- * It scans the package and subpackages across all available projects, looking for classes with the @
+ * It scans (heuristically scoped) packages across all available projects, looking for classes with the @
  * {@link MockOf} (Class) annotation. Such classes are kept track of, and a Mockito spy of them is made available via a
  * call to {@link #mockOf(Class)}. In this manner all generic mock behavior may be defined in one place (the class with
  * the {@literal @MockOf} annotation), but the mock received from {@link #mockOf(Class)} may be further customized via
@@ -38,10 +38,18 @@ public class Mockinator {
     private static final MockScanner scanner = new MockScanner();
 
     /**
-     * Scans the package and subpackages across all available projects, looking for classes with the @
-     * {@link MockOf}(Class) annotation. the {@link #mocks} map is updated with the real class or interface as keys, and
+     * Mockinator should be used as a utility class, no need for a public constructor
+     */
+    protected Mockinator() {}
+
+    /**
+     * Scans the specified package(s) and their subpackages across all available projects, looking for classes with the @
+     * {@link MockOf}(Class) annotation. The {@link #mocks} map is updated with the real class or interface as keys, and
      * the mock class as values. <br>
-     * Automatically called with the first call to {@link #mockOf(Class)}. Subsequent calls are no-ops.
+     * Automatically called with calls to {@link #mockOf(Class)}, if needed.
+     *
+     * @param packagesToScan The package(s) to scan. If none are provided, a default top-level package dynamically calculated
+     *                       from the calling class's package is scanned instead.
      */
     public static void scan(String... packagesToScan) {
         doScan(packagesToScan);
@@ -59,22 +67,27 @@ public class Mockinator {
     /**
      * This method will instantiate and return an appropriate mock for the specified class. This mock is in reality a
      * Mockito spy (via {@link Mockito#spy(Class)}) of the class found during the scan with a @{@link MockOf}(clazz)
-     * annotation whose {@literal clazz} is the same as the specified class.
+     * annotation whose {@literal clazz} is the same as the class specified here.
      *
      * @param realClass
      *            The interface or real class to grab the mock for
      * @return A Mockito.spy of the mock of the realClass. A new unique value each time!
+     * @throws RuntimeException if Mockinator could not find a mock of the requested class
+     *
+     * @implNote If a mock is not already found for the requested class, a scan is performed on the package of that class.
+     * If a mock is not found in that package, a scan is performed on a default top-level package dynamically calculated
+     * from the calling class's package. If a mock is still not found, then an exception is thrown.
      */
     @SuppressWarnings("unchecked")
     public static <T> T mockOf(Class<T> realClass) {
-        log.info("Looking for mockOf {}", realClass);
+        log.debug("Looking for mockOf {}", realClass);
         if (!mocks.containsKey(realClass)) {
             final String classPackage = realClass.getPackage().getName();
-            log.info("Did not have mockOf {} in {}, scanning classPackage {}...", realClass, mocks, classPackage);
+            log.trace("Did not have mockOf {} in {}, scanning classPackage {}...", realClass, mocks, classPackage);
             doScan(classPackage);
         }
         if (!mocks.containsKey(realClass)) {
-            log.info("Did not have mockOf {} in {}, scanning default location...", realClass, mocks);
+            log.trace("Did not have mockOf {} in {}, scanning default location...", realClass, mocks);
             doScan();
         }
         if (!mocks.containsKey(realClass)) {
@@ -114,11 +127,11 @@ public class Mockinator {
          */
         private void addCandidates(String packageToScan, Set<BeanDefinition> candidates) {
             if(StringUtils.isEmpty(packageToScan)) {
-                log.info("Specified packageToScan {} is invalid!", packageToScan);
+                log.trace("Specified packageToScan {} is invalid!", packageToScan);
                 return;
             }
             if(scannedPackages.contains(packageToScan) || scannedPackages.stream().anyMatch(packageToScan::startsWith)) {
-                log.info("Already scanned {}!", packageToScan);
+                log.trace("Already scanned {}!", packageToScan);
                 return;
             }
             /**
@@ -129,7 +142,7 @@ public class Mockinator {
                 candidates.addAll(scanner.findCandidateComponents(packageToScan));
                 // Since we scanned this package, make sure to ignore all potential candidates which are in packageToScan's subpackages
                 final Pattern thisPackage = Pattern.compile(String.format("^%s\\..*", packageToScan.replaceAll("\\.", "\\\\\\.")));
-                log.info("Adding exclude filter with {}", thisPackage);
+                log.trace("Adding exclude filter with {}", thisPackage);
                 scanner.addExcludeFilter(new RegexPatternTypeFilter(thisPackage));
             }
             // Keep track of the package we just scanned, so we don't try to rescan it
@@ -142,11 +155,11 @@ public class Mockinator {
          * @param packagesToScan
          */
         protected void scan(String... packagesToScan) {
-            log.info("Scan getting called on {}!", packagesToScan);
+            log.trace("Scan getting called on {}!", packagesToScan);
 
             if(packagesToScan == null || packagesToScan.length == 0) {
                 packagesToScan = new String[]{callingClassResolver.getCallingClassSuperPackage()};
-                log.info("Since no packagesToScan were provided, performing default scan on {}!", packagesToScan);
+                log.trace("Since no packagesToScan were provided, performing default scan on {}!", packagesToScan);
             }
 
             final Set<BeanDefinition> candidates = new HashSet<>();
@@ -156,10 +169,10 @@ public class Mockinator {
             candidates.stream().forEach(c -> {
                 try {
                     Class<?> mockClass = Class.forName(c.getBeanClassName());
-                    log.info("Found mock class: {}", mockClass);
+                    log.debug("Found mock class: {}", mockClass);
                     MockOf mockOf = mockClass.getAnnotation(MockOf.class);
                     Class<?> realClass = mockOf.value();
-                    log.info("It is a mock for: {}", realClass);
+                    log.debug("It is a mock for: {}", realClass);
                     mocks.put(realClass, mockClass);
                 } catch (Exception e) {
                     log.warn("Couldn't grab class for {}", c.getBeanClassName(), e);
@@ -173,7 +186,7 @@ public class Mockinator {
         private static class CallingClassResolver extends SecurityManager {
             public String getCallingClassSuperPackage() {
                 // The way Mockinator is organized, the calling class will always be at position 4 by the time we're here
-                log.info("getCallingClassSuperPackage from {}", getClassContext()[4]);
+                log.trace("getCallingClassSuperPackage from {}", getClassContext()[4]);
                 // Get the calling class's package, and only return the first 2 tokens of its package
                 return Stream.of(getClassContext()[4].getPackage().getName().split("\\."))
                         .limit(2)
