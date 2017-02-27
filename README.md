@@ -199,7 +199,7 @@ public class UserPaymentServiceTest {
 ```
 ```java
 public class UserZipcodeServiceTest {
-    UserDatabase userDbMock = Mockinator.mock(UserDatabase.class);
+    UserDatabase userDbMock = Mockinator.mockOf(UserDatabase.class);
     UserZipcodeService service = new UserZipcodeService(userDbMock);
     String zipcode_A = "11111";
     String zipcode_B = "22222";
@@ -222,3 +222,5 @@ public class UserZipcodeServiceTest {
     }
 }
 ```
+Of course, this isn't perfect. For example, in the above code, since we are storing the Users in a HashMap in the mock, changes to those Users' internal state will be reflected in the UserDatabaseMock values (so you might want to return deepcopies of the values, etc.). However the goal here is to increase code reuse, where at least the mocking code you write should be orders of magnitude less complex than the production code.
+Furthermore, Mockinator in some ways encourages Test Driven Development: writing the mock class first may prove beneficial, as it may allow you to think about the problem in a less complex environment than the production code.
