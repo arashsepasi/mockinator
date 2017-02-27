@@ -197,7 +197,6 @@ public class UserPaymentServiceTest {
     }
 }
 ```
-And to perform unit testing on the `UserZipcodeService.relocateUser` function, you'll likely do something like this:
 ```java
 public class UserZipcodeServiceTest {
     UserDatabase userDbMock = Mockinator.mock(UserDatabase.class);
